@@ -6,11 +6,17 @@ YELLOW = "\033[33m"
 DIM = "\033[2m"
 RESET = "\033[0m"
 BOLD = "\033[1m"
+MAGENTA = "\033[35m"
+RED = "\033[31m"
+
 # 工具输出最大字符数 -- 防止超大输出撑爆上下文
 MAX_TOOL_OUTPUT = 50000
 
+# 上下文限制长度
+CONTEXT_SAFE_LIMIT = 180000
+
 # 工作目录 -- 所有文件操作相对于此目录, 防止路径穿越
-WORKDIR = Path.cwd()
+WORKSPACE_DIR = Path(__file__).resolve().parent / "workspace"
 
 def colored_prompt() -> str:
     return f"{CYAN}{BOLD}You > {RESET}"
@@ -27,13 +33,21 @@ def print_tool(name: str, detail: str) -> None:
     """打印工具调用信息."""
     print(f"  {DIM}[tool: {name}] {detail}{RESET}")
 
+
+def print_warn(text: str) -> None:
+    print(f"{YELLOW}{text}{RESET}")
+
+
+def print_session(text: str) -> None:
+    print(f"{MAGENTA}{text}{RESET}")
+
 def safe_path(raw: str) -> Path:
     """
     将用户/模型传入的路径解析为安全的绝对路径.
     防止路径穿越: 最终路径必须在 WORKDIR 之下.
     """
-    target = (WORKDIR / raw).resolve()
-    if not str(target).startswith(str(WORKDIR)):
+    target = (WORKSPACE_DIR / raw).resolve()
+    if not str(target).startswith(str(WORKSPACE_DIR)):
         raise ValueError(f"Path traversal blocked: {raw} resolves outside WORKDIR")
     return target
 
