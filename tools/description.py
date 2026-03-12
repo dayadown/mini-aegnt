@@ -1,5 +1,32 @@
 TOOLS = [
     {
+        "name": "memory_write",
+        "description": (
+            "Save an important fact or observation to long-term memory. "
+            "Use when you learn something worth remembering about the user or context."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "content": {"type": "string", "description": "The fact or observation to remember."},
+                "category": {"type": "string", "description": "Category: preference, fact, context, etc."},
+            },
+            "required": ["content"],
+        },
+    },
+    {
+        "name": "memory_search",
+        "description": "Search stored memories for relevant information, ranked by similarity.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Search query."},
+                "top_k": {"type": "integer", "description": "Max results. Default: 5."},
+            },
+            "required": ["query"],
+        },
+    },
+    {
         "name": "bash",
         "description": (
             "Run a shell command and return its output. "

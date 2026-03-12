@@ -1,9 +1,9 @@
 import os
 
-from anthropic import Anthropic
-
 from context import *
 from session import *
+from skills import SkillsManager
+from system_prompt import build_system_prompt
 from tools.description import *
 from tools.handler import *
 from utils import *
@@ -17,11 +17,22 @@ client = Anthropic(
 SYSTEM_PROMPT = "You are a helpful AI assistant. Answer questions directly."
 
 
+def _auto_recall(user_message: str) -> str:
+    """根据用户消息自动搜索相关记忆, 注入到系统提示词中."""
+    results = memory_store.hybrid_search(user_message, top_k=3)
+    if not results:
+        return ""
+    return "\n".join(f"- [{r['path']}] {r['snippet']}" for r in results)
+
+
 def handle_repl_command(
         command: str,
         store: SessionStore,
         guard: ContextGuard,
         messages: list[dict],
+        bootstrap_data: dict[str, str],
+        skills_mgr: SkillsManager,
+        skills_block: str,
 ) -> tuple[bool, list[dict]]:
     """
     处理以 / 开头的命令。
@@ -97,6 +108,70 @@ def handle_repl_command(
         print_session(f"  {len(messages)} -> {len(new_messages)} messages")
         return True, new_messages
 
+    elif cmd == "/soul":
+        print_section("SOUL.md")
+        soul = bootstrap_data.get("SOUL.md", "")
+        print(soul if soul else f"{DIM}(未找到 SOUL.md){RESET}")
+        return True, messages
+
+    elif cmd == "/skills":
+        print_section("已发现的技能")
+        if not skills_mgr.skills:
+            print(f"{DIM}(未找到技能){RESET}")
+        else:
+            for s in skills_mgr.skills:
+                print(f"  {BLUE}{s['invocation']}{RESET}  {s['name']} - {s['description']}")
+                print(f"    {DIM}path: {s['path']}{RESET}")
+        return True, messages
+
+    elif cmd == "/memory":
+        print_section("记忆统计")
+        stats = memory_store.get_stats()
+        print(f"  长期记忆 (MEMORY.md): {stats['evergreen_chars']} 字符")
+        print(f"  每日文件: {stats['daily_files']}")
+        print(f"  每日条目: {stats['daily_entries']}")
+        return True, messages
+
+    elif cmd == "/search":
+        if not arg:
+            print(f"{YELLOW}用法: /search <query>{RESET}")
+            return True,messages
+        print_section(f"记忆搜索: {arg}")
+        results = memory_store.hybrid_search(arg)
+        if not results:
+            print(f"{DIM}(无结果){RESET}")
+        else:
+            for r in results:
+                color = GREEN if r["score"] > 0.3 else DIM
+                print(f"  {color}[{r['score']:.4f}]{RESET} {r['path']}")
+                print(f"    {r['snippet']}")
+        return True, messages
+
+    elif cmd == "/prompt":
+        print_section("完整系统提示词")
+        prompt = build_system_prompt(
+            mode="full", bootstrap=bootstrap_data,
+            skills_block=skills_block, memory_context=_auto_recall("show prompt"),
+        )
+        if len(prompt) > 3000:
+            print(prompt[:3000])
+            print(f"\n{DIM}... ({len(prompt) - 3000} more chars, total {len(prompt)}){RESET}")
+        else:
+            print(prompt)
+        print(f"\n{DIM}提示词总长度: {len(prompt)} 字符{RESET}")
+        return True, messages
+
+    elif cmd == "/bootstrap":
+        print_section("Bootstrap 文件")
+        if not bootstrap_data:
+            print(f"{DIM}(未加载 Bootstrap 文件){RESET}")
+        else:
+            for name, content in bootstrap_data.items():
+                print(f"  {BLUE}{name}{RESET}: {len(content)} chars")
+        total = sum(len(v) for v in bootstrap_data.values())
+        print(f"\n  {DIM}总计: {total} 字符 (上限: {MAX_TOTAL_CHARS}){RESET}")
+        return True, messages
+
     elif cmd == "/help":
         print_info("  Commands:")
         print_info("    /new [label]       Create a new session")
@@ -112,7 +187,13 @@ def handle_repl_command(
 
 
 def agent_loop() -> None:
-    """带会话持久化和上下文保护的主 agent 循环"""
+    # 启动阶段: 加载 Bootstrap 文件, 发现技能 (技能仅在启动时发现一次)
+    loader = BootstrapLoader(WORKSPACE_DIR)
+    bootstrap_data = loader.load_all(mode="full")
+
+    skills_mgr = SkillsManager(WORKSPACE_DIR)
+    skills_mgr.discover()
+    skills_block = skills_mgr.format_prompt_block()
 
     store = SessionStore(agent_id="agent0")
     guard = ContextGuard()
@@ -130,8 +211,12 @@ def agent_loop() -> None:
 
     print_info("=" * 60)
     print_info(f"  Model: {MODEL_ID}")
-    print_info(f"  Workdir: {WORKSPACE_DIR}")
-    print_info(f"  Tools: {', '.join(TOOL_HANDLERS.keys())}")
+    print_info(f"  Workspace: {WORKSPACE_DIR}")
+    print_info(f"  Bootstrap 文件: {len(bootstrap_data)}")
+    print_info(f"  已发现技能: {len(skills_mgr.skills)}")
+    stats = memory_store.get_stats()
+    print_info(f"  记忆: 长期 {stats['evergreen_chars']}字符, {stats['daily_files']} 个每日文件")
+    print_info("  命令: /soul /skills /memory /search /prompt /bootstrap")
     print_info("  输入 'quit' 或 'exit' 退出.")
     print_info("=" * 60)
     print()
@@ -154,10 +239,21 @@ def agent_loop() -> None:
         # --- REPL 命令 ---
         if user_input.startswith("/"):
             handled, messages = handle_repl_command(
-                user_input, store, guard, messages
+                user_input, store, guard, messages, bootstrap_data, skills_mgr, skills_block
             )
             if handled:
                 continue
+
+        # 自动记忆搜索 -- 将相关记忆注入系统提示词
+        memory_context = _auto_recall(user_input)
+        if memory_context:
+            print_info("  [自动召回] 找到相关记忆")
+
+        # 每轮重建系统提示词 (记忆可能在上一轮被更新)
+        system_prompt = build_system_prompt(
+            mode="full", bootstrap=bootstrap_data,
+            skills_block=skills_block, memory_context=memory_context,
+        )
 
         # --- Step 2: 追加 user 消息 ---
         messages.append({
@@ -172,7 +268,7 @@ def agent_loop() -> None:
                 response = guard.guard_api_call(
                     api_client=client,
                     model=MODEL_ID,
-                    system=SYSTEM_PROMPT,
+                    system=system_prompt,
                     tools=TOOLS,
                     messages=messages,
                 )
@@ -238,7 +334,7 @@ def agent_loop() -> None:
                     "role": "user",
                     "content": tool_results,
                 })
-                store.save_turn("user",tool_results)
+                store.save_turn("user", tool_results)
 
                 # 继续内循环
                 continue

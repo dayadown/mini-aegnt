@@ -1,6 +1,20 @@
 import subprocess
 from typing import Any
+
+from tools.memory import MemoryStore
 from utils import *
+
+memory_store = MemoryStore(WORKSPACE_DIR)
+def tool_memory_write(content: str, category: str = "general") -> str:
+    print_tool("memory_write", f"[{category}] {content[:60]}...")
+    return memory_store.write_memory(content, category)
+
+def tool_memory_search(query: str, top_k: int = 5) -> str:
+    print_tool("memory_search", query)
+    results = memory_store.hybrid_search(query, top_k)
+    if not results:
+        return "No relevant memories found."
+    return "\n".join(f"[{r['path']}] (score: {r['score']}) {r['snippet']}" for r in results)
 
 def tool_bash(command: str, timeout: int = 30) -> str:
     """执行 shell 命令并返回输出."""
@@ -102,6 +116,8 @@ TOOL_HANDLERS: dict[str, Any] = {
     "read_file": tool_read_file,
     "write_file": tool_write_file,
     "edit_file": tool_edit_file,
+    "memory_write": tool_memory_write,
+    "memory_search": tool_memory_search,
 }
 
 def process_tool_call(tool_name: str, tool_input: dict) -> str:
@@ -117,4 +133,3 @@ def process_tool_call(tool_name: str, tool_input: dict) -> str:
         return f"Error: Invalid arguments for {tool_name}: {exc}"
     except Exception as exc:
         return f"Error: {tool_name} failed: {exc}"
-
