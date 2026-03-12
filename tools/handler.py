@@ -18,7 +18,7 @@ def tool_bash(command: str, timeout: int = 30) -> str:
             capture_output=True,
             text=True,
             timeout=timeout,
-            cwd=str(WORKDIR),
+            cwd=str(WORKSPACE_DIR),
         )
         output = ""
         if result.stdout:
