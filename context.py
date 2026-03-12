@@ -203,6 +203,7 @@ class ContextGuard:
                 }
                 if tools:
                     kwargs["tools"] = tools
+                # todo skill用api的container
                 result = api_client.messages.create(**kwargs)
                 if current_messages is not messages:  # 有更新就更新messages
                     messages.clear()
