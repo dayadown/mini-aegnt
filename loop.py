@@ -135,7 +135,7 @@ def handle_repl_command(
     elif cmd == "/search":
         if not arg:
             print(f"{YELLOW}用法: /search <query>{RESET}")
-            return True,messages
+            return True, messages
         print_section(f"记忆搜索: {arg}")
         results = memory_store.hybrid_search(arg)
         if not results:
@@ -186,7 +186,7 @@ def handle_repl_command(
     return False, messages
 
 
-def agent_loop() -> None:
+async def agent_loop() -> None:
     # 启动阶段: 加载 Bootstrap 文件, 发现技能 (技能仅在启动时发现一次)
     loader = BootstrapLoader(WORKSPACE_DIR)
     bootstrap_data = loader.load_all(mode="full")
@@ -209,11 +209,21 @@ def agent_loop() -> None:
         messages = []
         print_session(f"  Created initial session: {sid}")
 
+    # 加载mcp tools
+    mcp_cli = mcp_client.McpClient()
+    await mcp_cli.connect_to_server()
+    if mcp_cli.session:
+        tools_by_mcp = await mcp_cli.get_claude_tools()
+    else:
+        tools_by_mcp = []
+    TOOLS.extend(tools_by_mcp)
+
     print_info("=" * 60)
     print_info(f"  Model: {MODEL_ID}")
     print_info(f"  Workspace: {WORKSPACE_DIR}")
     print_info(f"  Bootstrap 文件: {len(bootstrap_data)}")
     print_info(f"  已发现技能: {len(skills_mgr.skills)}")
+    print_info(f"  McpTools: {len(tools_by_mcp)}")
     stats = memory_store.get_stats()
     print_info(f"  记忆: 长期 {stats['evergreen_chars']}字符, {stats['daily_files']} 个每日文件")
     print_info("  命令: /soul /skills /memory /search /prompt /bootstrap")
@@ -321,7 +331,7 @@ def agent_loop() -> None:
                         continue
 
                     # 执行工具
-                    result = process_tool_call(block.name, block.input)
+                    result =await process_tool_call(block.name, block.input, mcp_cli)
 
                     tool_results.append({
                         "type": "tool_result",

@@ -1,13 +1,18 @@
 import subprocess
 from typing import Any
 
+import mcp_client
+from tools.description import TOOLS
 from tools.memory import MemoryStore
 from utils import *
 
 memory_store = MemoryStore(WORKSPACE_DIR)
+
+
 def tool_memory_write(content: str, category: str = "general") -> str:
     print_tool("memory_write", f"[{category}] {content[:60]}...")
     return memory_store.write_memory(content, category)
+
 
 def tool_memory_search(query: str, top_k: int = 5) -> str:
     print_tool("memory_search", query)
@@ -15,6 +20,7 @@ def tool_memory_search(query: str, top_k: int = 5) -> str:
     if not results:
         return "No relevant memories found."
     return "\n".join(f"[{r['path']}] (score: {r['score']}) {r['snippet']}" for r in results)
+
 
 def tool_bash(command: str, timeout: int = 30) -> str:
     """执行 shell 命令并返回输出."""
@@ -120,12 +126,19 @@ TOOL_HANDLERS: dict[str, Any] = {
     "memory_search": tool_memory_search,
 }
 
-def process_tool_call(tool_name: str, tool_input: dict) -> str:
+
+async def process_tool_call(tool_name: str, tool_input: dict, mcp_cli: mcp_client.McpClient) -> str:
     """
     根据工具名分发到对应的处理函数.
     """
     handler = TOOL_HANDLERS.get(tool_name)
     if handler is None:
+        mcp_result = await mcp_cli.session.call_tool(name=tool_name, arguments=tool_input)
+        mcp_text = ""
+        for item in mcp_result.content:
+            if item.type == "text":
+                mcp_text += item.text
+        return mcp_text
         return f"Error: Unknown tool '{tool_name}'"
     try:
         return handler(**tool_input)
