@@ -2,7 +2,9 @@ import subprocess
 from typing import Any
 
 import mcp_client
-from tools.description import TOOLS
+import skills1
+from tools.description import MCP_TOOL_HANDLERS, SKILL_TOOL_HANDLERS
+
 from tools.memory import MemoryStore
 from utils import *
 
@@ -39,6 +41,7 @@ def tool_bash(command: str, timeout: int = 30) -> str:
             text=True,
             timeout=timeout,
             cwd=str(WORKSPACE_DIR),
+            encoding="utf-8",
         )
         output = ""
         if result.stdout:
@@ -127,19 +130,27 @@ TOOL_HANDLERS: dict[str, Any] = {
 }
 
 
-async def process_tool_call(tool_name: str, tool_input: dict, mcp_cli: mcp_client.McpClient) -> str:
+
+async def process_tool_call(tool_name: str, tool_input: dict, mcp_cli: mcp_client.McpClient,skills_mgr:skills1.SkillsManager) -> str:
     """
     根据工具名分发到对应的处理函数.
     """
     handler = TOOL_HANDLERS.get(tool_name)
+    # mcp tool
+
     if handler is None:
-        mcp_result = await mcp_cli.session.call_tool(name=tool_name, arguments=tool_input)
-        mcp_text = ""
-        for item in mcp_result.content:
-            if item.type == "text":
-                mcp_text += item.text
-        return mcp_text
-        return f"Error: Unknown tool '{tool_name}'"
+        # mcp tool
+        if tool_name in MCP_TOOL_HANDLERS:
+            mcp_result = await mcp_cli.session.call_tool(name=tool_name, arguments=tool_input)
+            mcp_text = ""
+            for item in mcp_result.content:
+                if item.type == "text":
+                    mcp_text += item.text
+            return mcp_text
+        # skil
+        if tool_name in SKILL_TOOL_HANDLERS:
+            return str(skills_mgr.execute(tool_name))
+
     try:
         return handler(**tool_input)
     except TypeError as exc:

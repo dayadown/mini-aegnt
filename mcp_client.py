@@ -1,7 +1,6 @@
 from contextlib import AsyncExitStack
-from pathlib import Path
 from typing import Optional
-
+from tools.description import *
 from mcp import ClientSession, StdioServerParameters, stdio_client
 
 from utils import *
@@ -12,7 +11,7 @@ class McpClient:
     def __init__(self):
         # Initialize session and client objects
         self.session: Optional[ClientSession] = None
-        self.server_path: Path = WORKSPACE_DIR / "mcp_server_examples"/"weather-server-python"/"weather.py"
+        self.server_path: Path = WORKSPACE_DIR / "mcp_server_examples" / "weather-server-python" / "weather.py"
         self.exit_stack = AsyncExitStack()
 
     async def get_claude_tools(self):
@@ -26,7 +25,8 @@ class McpClient:
                 "description": tool.description or "",
                 "input_schema": tool.inputSchema  # Rename inputSchema to input_schema
             })
-
+            # 注册
+            MCP_TOOL_HANDLERS.add(tool.name)
         return claude_tools
 
     async def connect_to_server(self):

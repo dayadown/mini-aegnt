@@ -109,3 +109,7 @@ TOOLS = [
         },
     },
 ]
+
+MCP_TOOL_HANDLERS = set()
+
+SKILL_TOOL_HANDLERS = set()

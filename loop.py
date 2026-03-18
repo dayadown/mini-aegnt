@@ -2,7 +2,7 @@ import os
 
 from context import *
 from session import *
-from skills import SkillsManager
+from skills1 import SkillsManager
 from system_prompt import build_system_prompt
 from tools.description import *
 from tools.handler import *
@@ -192,8 +192,12 @@ async def agent_loop() -> None:
     bootstrap_data = loader.load_all(mode="full")
 
     skills_mgr = SkillsManager(WORKSPACE_DIR)
-    skills_mgr.discover()
-    skills_block = skills_mgr.format_prompt_block()
+    skills_mgr.load()
+    skills_block = skills_mgr.build_system_prompt()
+
+    # skills作为tool注入
+    tools_by_skill = skills_mgr.to_tools()
+    TOOLS.extend(tools_by_skill)
 
     store = SessionStore(agent_id="agent0")
     guard = ContextGuard()
@@ -331,7 +335,7 @@ async def agent_loop() -> None:
                         continue
 
                     # 执行工具
-                    result =await process_tool_call(block.name, block.input, mcp_cli)
+                    result = await process_tool_call(block.name, block.input, mcp_cli,skills_mgr)
 
                     tool_results.append({
                         "type": "tool_result",
