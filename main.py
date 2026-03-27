@@ -10,6 +10,11 @@ import sys
 from loop import *
 
 
+# todo 记录每次长任务的代办事项
+# todo plan模式和build模式
+# todo subagent
+
+
 async def main() -> None:
     if not os.getenv("API_KEY"):
         print(f"{YELLOW}Error: API_KEY 未设置.{RESET}")

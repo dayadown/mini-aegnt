@@ -2,8 +2,9 @@ import subprocess
 from typing import Any
 
 import mcp_client
-import skills1
+import skills
 from tools.description import MCP_TOOL_HANDLERS, SKILL_TOOL_HANDLERS
+from todo import *
 
 from tools.memory import MemoryStore
 from utils import *
@@ -41,7 +42,6 @@ def tool_bash(command: str, timeout: int = 30) -> str:
             text=True,
             timeout=timeout,
             cwd=str(WORKSPACE_DIR),
-            encoding="utf-8",
         )
         output = ""
         if result.stdout:
@@ -120,6 +120,8 @@ def tool_edit_file(file_path: str, old_string: str, new_string: str) -> str:
         return f"Error: {exc}"
 
 
+TODO = TodoManager()
+
 TOOL_HANDLERS: dict[str, Any] = {
     "bash": tool_bash,
     "read_file": tool_read_file,
@@ -127,11 +129,12 @@ TOOL_HANDLERS: dict[str, Any] = {
     "edit_file": tool_edit_file,
     "memory_write": tool_memory_write,
     "memory_search": tool_memory_search,
+    "todo": TODO.update,
 }
 
 
-
-async def process_tool_call(tool_name: str, tool_input: dict, mcp_cli: mcp_client.McpClient,skills_mgr:skills1.SkillsManager) -> str:
+async def process_tool_call(tool_name: str, tool_input: dict, mcp_cli: mcp_client.McpClient,
+                            skills_mgr: skills.SkillsManager) -> str:
     """
     根据工具名分发到对应的处理函数.
     """
@@ -147,7 +150,7 @@ async def process_tool_call(tool_name: str, tool_input: dict, mcp_cli: mcp_clien
                 if item.type == "text":
                     mcp_text += item.text
             return mcp_text
-        # skil
+        # skill
         if tool_name in SKILL_TOOL_HANDLERS:
             return str(skills_mgr.execute(tool_name))
 

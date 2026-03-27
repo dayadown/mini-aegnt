@@ -1,5 +1,27 @@
 TOOLS = [
     {
+        "name": "todo",
+        "description": "Update task list. Track progress on multi-step tasks.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {"type": "string"},
+                            "text": {"type": "string"},
+                            "status": {"type": "string", "enum": ["pending", "in_progress", "completed"]}
+                        },
+                        "required": ["id", "text", "status"]
+                    }
+                }
+            },
+            "required": ["items"]
+        }
+    },
+    {
         "name": "memory_write",
         "description": (
             "Save an important fact or observation to long-term memory. "

@@ -2,7 +2,7 @@ import os
 
 from context import *
 from session import *
-from skills1 import SkillsManager
+from skills import SkillsManager
 from system_prompt import build_system_prompt
 from tools.description import *
 from tools.handler import *
@@ -13,8 +13,6 @@ client = Anthropic(
     api_key=os.getenv("API_KEY"),
     base_url=os.getenv("BASE_URL") or None,
 )
-
-SYSTEM_PROMPT = "You are a helpful AI assistant. Answer questions directly."
 
 
 def _auto_recall(user_message: str) -> str:
@@ -119,9 +117,11 @@ def handle_repl_command(
         if not skills_mgr.skills:
             print(f"{DIM}(未找到技能){RESET}")
         else:
-            for s in skills_mgr.skills:
-                print(f"  {BLUE}{s['invocation']}{RESET}  {s['name']} - {s['description']}")
-                print(f"    {DIM}path: {s['path']}{RESET}")
+            for s in skills_mgr.skills.values():
+                invocation = f"{s.emoji} {s.name}".strip()
+                cmd_info = f" ({s.cmd})" if s.cmd else ""
+                print(f"  {BLUE}{invocation}{RESET}{cmd_info}  - {s.description}")
+                print(f"    {DIM}path: {s.location}{RESET}")
         return True, messages
 
     elif cmd == "/memory":
@@ -269,6 +269,7 @@ async def agent_loop() -> None:
             skills_block=skills_block, memory_context=memory_context,
         )
 
+        rounds_since_todo = 0
         # --- Step 2: 追加 user 消息 ---
         messages.append({
             "role": "user",
@@ -315,6 +316,7 @@ async def agent_loop() -> None:
                     })
             store.save_turn("assistant", serialized_content)
 
+            used_todo = False  # 待办使用标识
             # --- 检查 stop_reason ---
             if response.stop_reason == "end_turn":
                 # 模型说完了, 提取文本打印
@@ -335,13 +337,24 @@ async def agent_loop() -> None:
                         continue
 
                     # 执行工具
-                    result = await process_tool_call(block.name, block.input, mcp_cli,skills_mgr)
+                    result = await process_tool_call(block.name, block.input, mcp_cli, skills_mgr)
 
                     tool_results.append({
                         "type": "tool_result",
                         "tool_use_id": block.id,
                         "content": result,
                     })
+
+                    if block.name == "todo":
+                        used_todo = True
+
+                # 判断待办提醒
+                if used_todo:
+                    rounds_since_todo = 0
+                else:
+                    rounds_since_todo += 1
+                if rounds_since_todo >= 3:
+                    tool_results.append({"type": "text", "text": "<reminder>Update your todos.</reminder>"})
 
                 # 把所有工具结果作为一条 user 消息追加
                 messages.append({
