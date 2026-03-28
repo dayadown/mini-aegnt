@@ -50,49 +50,6 @@ class ContextGuard:
     def __init__(self, max_tokens: int = CONTEXT_SAFE_LIMIT):
         self.max_tokens = max_tokens
 
-    @staticmethod
-    def estimate_tokens(text: str) -> int:  # 简易估算文本的 Token 数量
-        return len(text) // 4
-
-    def estimate_messages_tokens(self, messages: list[dict]) -> int:
-        total = 0
-        for msg in messages:
-            content = msg.get("content", "")
-            if isinstance(content, str):
-                total += self.estimate_tokens(content)
-            elif isinstance(content, list):
-                for block in content:
-                    if isinstance(block, dict):
-                        if "text" in block:
-                            total += self.estimate_tokens(block["text"])
-                        elif block.get("type") == "tool_result":
-                            rc = block.get("content", "")
-                            if isinstance(rc, str):
-                                total += self.estimate_tokens(rc)
-                        elif block.get("type") == "tool_use":
-                            total += self.estimate_tokens(
-                                json.dumps(block.get("input", {}))
-                            )
-                    else:
-                        if hasattr(block, "text"):
-                            total += self.estimate_tokens(block.text)
-                        elif hasattr(block, "input"):
-                            total += self.estimate_tokens(
-                                json.dumps(block.input)
-                            )
-        return total
-
-    def truncate_tool_result(self, result: str, max_fraction: float = 0.3) -> str:
-        """在换行边界处只保留头部进行截断。"""
-        max_chars = int(self.max_tokens * 4 * max_fraction)
-        if len(result) <= max_chars:
-            return result
-        cut = result.rfind("\n", 0, max_chars)
-        if cut <= 0:
-            cut = max_chars
-        head = result[:cut]
-        return head + f"\n\n[... truncated ({len(result)} chars total, showing first {len(head)}) ...]"
-
     def compact_history(self, messages: list[dict],
                         api_client: Anthropic, model: str) -> list[dict]:
         """
@@ -197,13 +154,12 @@ class ContextGuard:
             try:
                 kwargs: dict[str, Any] = {
                     "model": model,
-                    "max_tokens": 8096,
+                    "max_tokens": 1024,
                     "system": system,
                     "messages": current_messages,
                 }
                 if tools:
                     kwargs["tools"] = tools
-                # todo skill用api的container
                 result = api_client.messages.create(**kwargs)
                 if current_messages is not messages:  # 有更新就更新messages
                     messages.clear()

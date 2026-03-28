@@ -10,9 +10,9 @@ import sys
 from loop import *
 
 
-# todo 记录每次长任务的代办事项
-# todo plan模式和build模式
 # todo subagent
+# todo plan模式和build模式
+# todo bug：消息超长度后被压缩，但是超长消息已经前置被持久化，下次进入会再次加载
 
 
 async def main() -> None:
